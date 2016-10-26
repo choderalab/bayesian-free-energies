@@ -27,6 +27,7 @@ def strip_in_unit_system(quant, unit_system=unit.md_unit_system, compatible_with
     else:
         return quant
 
+
 class BayesianHarmonicSwapper(object):
     """
     Class for testing Bayesian Mixture Sampling on a 3D harmonic oscillator. The harmonic oscillator is allowed to
@@ -63,11 +64,13 @@ class BayesianHarmonicSwapper(object):
 
         self.K = (K1, K2)
         self.zeta = (zeta[0], zeta[1])
+        self.sigma = (strip_in_unit_system(sigma1), strip_in_unit_system(sigma2))
 
-        # Choose the intial force constant
+        # Choose the initial force constant of the harmonic oscillator
         self.state = np.random.choice((0, 1))
         self.K_current = self.K[self.state]
         self.zeta_current = self.zeta[self.state]
+        self.sigma_current = self.sigma[self.state]
 
         # self.K_current = np.random.choice((self.K1, self.K2))
         # self.K_current_unitless = strip_in_unit_system(self.K_current)
@@ -77,14 +80,19 @@ class BayesianHarmonicSwapper(object):
         tau = 2 * np.pi * unit.sqrt(self.mass / (K1 / 2.0 + K2 / 2.0))  # time constant
         self.timestep = tau / 20.0
 
+        # The initial configuration of the oscillator
+        self.position = np.zeros([1, 3], np.float32)
+        self.velocity = None
+
         # The openmm system
         (self.context, self.integrator, self.system) = self.make_harmonic_context(self.K_current)
 
-        # The counting statistics, which tracks the number in the second state
+        # The sampling statistics
         self.state_counter = 0
         self.nmoves = 0
+        self.radii = []
 
-    def make_harmonic_context(self, K, positions=None, velocities=None):
+    def make_harmonic_context(self, K):
         """
         Create the system in openmm with for a specified force constant.
         """
@@ -103,13 +111,12 @@ class BayesianHarmonicSwapper(object):
         context = openmm.Context(system, integrator, platform)
 
         # Set the positions and velocities.
-        if positions is None:
-            positions = unit.Quantity(np.zeros([1, 3], np.float32), unit.angstroms)
+        positions = unit.Quantity(self.position, unit.angstroms)
         context.setPositions(positions)
-        if velocities is None:
+        if self.velocity is None:
             context.setVelocitiesToTemperature(self.temperature)
         else:
-            context.setVelocities(velocities)
+            context.setVelocities(self.velocity)
 
         return context, integrator, system
 
@@ -130,11 +137,16 @@ class BayesianHarmonicSwapper(object):
           the energy of the harmonic oscillator
 
         """
-        return np.sqrt(np.sum(positions ** 2)) * K / 2.0 / self.kT_unitless
+        return np.sum(positions ** 2) * K / 2.0 / self.kT_unitless
 
-    def attempt_swap(self):
+    def attempt_swap(self, openmm = True):
         """
         Metropolis-Hastings trial move to change the force constant
+
+        Parameter
+        ---------
+        openmm: bool
+          whether OpenMM is being used to sample configurations
 
         Returns
         -------
@@ -143,30 +155,28 @@ class BayesianHarmonicSwapper(object):
         """
 
         # Mixture sampling with Metropolis-Hastings
-        initial_positions = self.context.getState(getPositions=True).getPositions(asNumpy=True)
-        initial_velocities = self.context.getState(getVelocities=True).getVelocities(asNumpy=True)
-        initial_energy = self.get_energy(initial_positions, strip_in_unit_system(self.K_current))
-        initial_K = self.K_current
+        initial_energy = self.get_energy(self.position, strip_in_unit_system(self.K_current))
 
         # Pick a random force constant
         new_state = np.random.choice((0, 1))
         new_K = self.K[new_state]
         new_zeta = self.zeta[new_state]
         if new_state != self.state:
-            final_energy = self.get_energy(initial_positions, strip_in_unit_system(new_K))
+            final_energy = self.get_energy(self.position, strip_in_unit_system(new_K))
             log_accept = -(final_energy - initial_energy) + (new_zeta - self.zeta_current)
             if (log_accept > 0.0) or (np.random.random() < np.exp(log_accept)):
                 self.K_current = new_K
                 self.zeta_current = new_zeta
-                (self.context, self.integrator, self.system) = self.make_harmonic_context(self.K_current,
-                                                                                          initial_positions,
-                                                                                          initial_velocities)
+                self.sigma_current = self.sigma[new_state]
+                if openmm == True:
+                    (self.context, self.integrator, self.system) = self.make_harmonic_context(self.K_current)
                 self.state = new_state
         return self.state
 
-    def mixture_sample(self, niterations=100, save_freq=10, nsteps=100):
+    def mixture_sample(self, niterations=100, save_freq=50, nsteps=100, openmm = True):
         """
-        Cycle between label sampling and configuration sampling, where configurations are sampled with openmm.
+        Cycle between label sampling and configuration sampling. Configurations can be sampled with OpenMM, or by
+        pseudo random number generation from a Guassian.
 
         Parameters
         ----------
@@ -176,11 +186,24 @@ class BayesianHarmonicSwapper(object):
           the frequency with which the state will be recorded. A device to thin the data
         nsteps: int
           the number of moleculear dynamics moves per iteration
+        openmm : bool
+          whether OpenMM is being used to sample configurations
         """
         for iteration in range(niterations):
             # Configuration sampling
-            self.integrator.step(nsteps)
-            state = self.attempt_swap()
+            if openmm == True:
+                self.integrator.step(nsteps)
+                self.position = strip_in_unit_system(self.context.getState(getPositions=True).getPositions(asNumpy=True))
+                self.velocity = self.context.getState(getVelocities=True).getVelocities()
+            else:
+                self.position  = np.random.normal(loc=0.0, scale=self.sigma_current, size=3)
+            state = self.attempt_swap(openmm = openmm)
+            # Save statistics
             if iteration % save_freq:
                 self.nmoves += 1
                 self.state_counter += state
+                if openmm == True:
+                    position = strip_in_unit_system(self.position)[0]
+                    self.radii.append(np.sqrt(np.sum(position ** 2)))
+                else:
+                    self.radii.append(np.sqrt(np.sum(self.position ** 2)))
