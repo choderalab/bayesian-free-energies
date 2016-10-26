@@ -1,5 +1,6 @@
 import numpy as np
 from scipy import optimize
+from scipy import special
 
 class MaximumLikelihood(object):
     """
@@ -47,6 +48,34 @@ class MaximumLikelihood(object):
         """
         return 1/ (1 + np.exp(f - self.zetas))
 
+    def _chooseln(self, N, k):
+        """
+        The log of binomial coefficient. Useful for evaluating log likelihoods for binomial models.
+
+        Parameters
+        ----------
+        N : float
+          the number of trials
+        k : float
+          the number of successes
+
+        Return
+        ------
+        float
+          the log of the binomial coefficient
+        """
+        return special.gammaln(N+1) - special.gammaln(N-k+1) - special.gammaln(k+1)
+
+    def log_likelihood(self, f_guess):
+
+        p_guess = self.logistic(f_guess)
+        q_guess = 1.0 - p_guess
+
+        l = np.sum([self._chooseln(N, k) for (N, k) in zip( self.nsamples, self.nsuccesses ) ])
+        l += np.sum(self.nsuccesses * np.log(p_guess) + (self.nsamples - self.nsuccesses) * np.log(q_guess))
+
+        return l
+
     def sum_of_squares(self, f_guess):
         """
         Return the sum of squares of the normalised logistic function and a guess of the free energy
@@ -82,5 +111,27 @@ class MaximumLikelihood(object):
             f_guess = np.random.choice(self.zetas, size = 1)
 
         fit = optimize.minimize(self.sum_of_squares, f_guess, method='BFGS')
+
+        return fit.x
+
+    def max_like(self, f_guess=None):
+        """
+        Find the free energy that maximises the likelihood of observing the state labels
+
+        Parameter
+        ---------
+        f_guess : float
+          initial guess of the free energy difference
+
+        Returns
+        -------
+
+        f_optimised : float
+          the fitted free energy difference
+        """
+        if f_guess is None:
+            f_guess = np.random.choice(self.zetas, size=1)
+
+        fit = optimize.minimize(lambda x: -self.log_likelihood(x), f_guess, method='Powell')
 
         return fit.x
