@@ -28,7 +28,7 @@ def strip_in_unit_system(quant, unit_system=unit.md_unit_system, compatible_with
         return quant
 
 
-class BayesianHarmonicSwapper(object):
+class HarmonicSwapper(object):
     """
     Class for testing Bayesian Mixture Sampling on a 3D harmonic oscillator. The harmonic oscillator is allowed to
     alternate the force constant between two set values.
@@ -189,6 +189,7 @@ class BayesianHarmonicSwapper(object):
         openmm : bool
           whether OpenMM is being used to sample configurations
         """
+        #TODO: save the time course data of the states, instead of adding them
         for iteration in range(niterations):
             # Configuration sampling
             if openmm == True:
@@ -199,7 +200,7 @@ class BayesianHarmonicSwapper(object):
                 self.position  = np.random.normal(loc=0.0, scale=self.sigma_current, size=3)
             state = self.attempt_swap(openmm = openmm)
             # Save statistics
-            if iteration % save_freq:
+            if iteration % save_freq == 0:
                 self.nmoves += 1
                 self.state_counter += state
                 if openmm == True:
