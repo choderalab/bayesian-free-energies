@@ -8,8 +8,23 @@ class MaximumLikelihood(object):
     Class to calculate the ratio of normalising constant from bayesian mixture sampling of a two state system. The
     sampling distribution of the data is bimonial. Can either calculate the free energies via least squares fitting or
     maximum likelihood, the former may be more stable in some cases.
-    """
 
+    This class works in conjunction with the HarmonicSwapper class.
+
+    Example
+    -------
+    Perform mixture sampling then estimate the free energy via maximum likelihood.
+    Samples states:
+    >>> zetas = range(-5,5)
+    >>> n_success = []
+    >>> for z in zetas:
+    >>>    Swapper = HarmonicSwapper(zeta = [0.0, z])
+    >>>    Swapper.mixture_sample(openmm = False)
+    >>>    n_success.append( swapper.state_counter )
+    Estimate free energy difference:
+    >>> Fitter = MaximumLikelihood(zetas = np.array(zetas), nsuccesses = np.array(n_success), nsamples = swapper.nmoves)
+    >>> Fitter.max_like()
+    """
     def __init__(self, zetas, nsuccesses, nsamples):
         """
         Initialise the fitting tool.
@@ -153,6 +168,23 @@ class BayesianSampler(MaximumLikelihood):
     """
     Class to estimate the free energy difference between two states using the 'emcee' package to sample from
     the posterior. Currently, only prior distributions with 2 parameters are supported.
+
+    Example
+    -------
+    Perform mixture sampling then sample from the posterior of the free energy difference.
+    Samples states:
+    >>> zetas = range(-5,5)
+    >>> n_success = []
+    >>> for z in zetas:
+    >>>    Swapper = HarmonicSwapper(zeta = [0.0, z])
+    >>>    Swapper.mixture_sample(openmm = False)
+    >>>    n_success.append( Swapper.state_counter )
+    Estimate free energy difference:
+    >>> Sampler = BayesianSampler(zetas = np.array(zetas), nsuccesses = np.array(n_success), nsamples = Swapper.nmoves)
+    >>> chain = Sampler.sample_posterior()
+    >>> samples = chain[:, 50:, :].reshape((-1, 1))
+    >>> print( flat_samples.mean() )
+    >>> print( flat_samples.std() )
     """
     def __init__(self, zetas, nsuccesses, nsamples, prior = 'normal', location = 0, spread = 5):
         """

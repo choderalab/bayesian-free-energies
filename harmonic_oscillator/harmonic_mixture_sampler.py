@@ -3,8 +3,6 @@ import numpy as np
 
 kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
 
-
-
 def strip_in_unit_system(quant, unit_system=unit.md_unit_system, compatible_with=None):
     """
     Strips the unit from a simtk.units.Quantity object and returns it's value conforming to a unit system
@@ -30,14 +28,15 @@ def strip_in_unit_system(quant, unit_system=unit.md_unit_system, compatible_with
 
 class HarmonicSwapper(object):
     """
-    Class for testing Bayesian Mixture Sampling on a 3D harmonic oscillator. The harmonic oscillator is allowed to
-    alternate the force constant between two set values.
+    Mixture sampling class for testing Bayesian Mixture Sampling on a 3D harmonic oscillator. Configurations are
+    sampled from two harmonic oscillators in which the force constant alternates between two preset values. States
+    and configurations are sampled, although only the states are saved.
 
     Example
     -------
     Perform mixture sampling for a harmonic oscillator with 2 possible standard deviations, and see the proportion
     sampled in the second state.
-    >>> swapper = BayesianHarmonicSwapper(sigma1 = 5.0 * unit.angstrom, sigma2 = 7.0 * unit.angstrom)
+    >>> swapper = HarmonicSwapper(sigma1 = 5.0 * unit.angstrom, sigma2 = 7.0 * unit.angstrom)
     >>> swapper.mixture_sample(niterations=500)
     >>> print 'fraction in state 1 = {0:f}'.format(1.0*swapper.state_counter / swapper.nmoves)
     """
@@ -153,11 +152,11 @@ class HarmonicSwapper(object):
         state: int
           the index of the current state (either 0 or 1)
         """
-
         # Mixture sampling with Metropolis-Hastings
         initial_energy = self.get_energy(self.position, strip_in_unit_system(self.K_current))
 
         # Pick a random force constant
+        # TODO: sample states from the global update scheme.
         new_state = np.random.choice((0, 1))
         new_K = self.K[new_state]
         new_zeta = self.zeta[new_state]
