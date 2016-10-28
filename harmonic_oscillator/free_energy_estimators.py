@@ -78,8 +78,8 @@ class MaximumLikelihood(object):
           the free energy estimate
         """
 
-        p_guess = self.logistic(f_guess)
-        q_guess = 1.0000001 - p_guess     # Ensuring that I don't get zeros for log(q_guess)
+        p_guess = self.logistic(f_guess) - 1E-10
+        q_guess = 1 - p_guess     # Ensuring that I don't get zeros for log(q_guess)
 
         l = np.sum(self.nsuccesses * np.log(p_guess) + (self.nsamples - self.nsuccesses) * np.log(q_guess))
 
