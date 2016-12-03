@@ -1,5 +1,6 @@
 import numpy as np
 from scipy import optimize
+from scipy.misc import logsumexp
 from scipy import special
 import emcee
 
@@ -39,7 +40,7 @@ class MultinomialBayes(object):
         """
         return 1 / (1 + np.exp(f - z))
 
-    def loglikelihood(self, f):
+    def log_likelihood(self, f):
         """
         The log likelihood of the counts, with the normalisation constant discarded:
 
@@ -53,8 +54,31 @@ class MultinomialBayes(object):
         l: float
           the log of the unnormalised likelihood
         """
-        diffs = self.zetas - f
-        l = self.counts * diffs + self.counts * np.log(np.sum(np.exp(diffs)))
+        f = f - f[0]
+        #diffs = self.zetas - f
+        #dam = np.max(diffs)     # dam to stop numerical overflow
+        #l = self.counts * diffs + self.counts * dam * np.log(np.sum(np.exp(diffs - dam)))
+        l = -self.counts * f + self.counts * logsumexp(self.zetas - f)
+        l = np.sum(l)
+
+        return l
+
+    def _loglike_fixed(self, f):
+        """
+        The log likelihood of the counts, with the normalisation constant discarded and the first element fixed.
+
+        Parameter
+        ---------
+        f: numpy.ndarray
+          the vector of estimates for the free energy
+
+        Returns
+        -------
+        l: float
+          the log of the unnormalised likelihood
+        """
+        f = np.hstack((0.0,f))
+        l = -self.counts * f + self.counts * logsumexp(self.zetas - f)
         l = np.sum(l)
 
         return l
@@ -75,10 +99,10 @@ class MultinomialBayes(object):
           the fitted free energy difference
         """
         if f_guess is None:
-            f_guess = self.zetas + np.random.normal(size = len(zetas))
-            f_guess[0] = 0.0
+            f_guess = np.log(self.counts + 1)
+            f_guess = f_guess - f_guess[0]
 
+        f_guess = f_guess[1::]
+        fit = optimize.minimize(lambda x: -self._loglike_fixed(x), f_guess, method='BFGS')
 
-        fit = optimize.minimize(lambda x: -self.log_likelihood(x), f_guess, method='Powell')
-
-        return fit.x
+        return np.hstack((0.0,fit.x))
