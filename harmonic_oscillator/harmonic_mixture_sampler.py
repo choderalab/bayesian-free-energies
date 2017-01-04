@@ -27,10 +27,10 @@ def strip_in_unit_system(quant, unit_system=unit.md_unit_system, compatible_with
 
 class GaussianMixtureSwapper(object):
     """
-    Class to sample the configurations and states of a mixture of Gaussian distributions with a different standard
-    deviations.
+    Class to sample the configurations and states of a one-dimensional mixture of Gaussian distributions with a
+    different standard deviations.
     """
-    def __init__(self, sigmas = np.arange(1,100,10), zetas = np.zeros(10)):
+    def __init__(self, sigmas = np.arange(1,100,10), zetas = None):
         """
         Initialisation of the multiple states of the Gaussian mixture.
 
@@ -45,8 +45,15 @@ class GaussianMixtureSwapper(object):
         -------
 
         """
-        self.sigmas = sigmas
-        self.zetas = zetas
+        self.sigmas = np.array(sigmas)
+        if zetas is not None:
+            if np.array(zetas).shape != self.sigmas.shape:
+                raise Exception('The number of biasing potentials (zetas) must match the length of sigmas')
+            else:
+                self.zetas = np.array(zetas)
+        else:
+            self.zetas = np.zeros(len(sigmas))
+
         self.position = 1.0   # The position of the oscillator
 
         # Pick the current state
@@ -56,7 +63,7 @@ class GaussianMixtureSwapper(object):
         self.state_counter = np.zeros(len(self.sigmas))
         self.nmoves = 0
 
-    def get_energy(self):
+    def _get_energy(self):
         """
         The negative log of the probability density of the position for each state
 
@@ -67,17 +74,17 @@ class GaussianMixtureSwapper(object):
         """
         return (self.position**2.0)/2.0/(self.sigmas**2)
 
-    def sample_state(self):
+    def _sample_state(self):
         """
         Sample the state conditioned on the position
 
         """
-        q = np.exp(-self.get_energy() + self.zetas)
+        q = np.exp(-self._get_energy() + self.zetas)
         p = q / np.sum(q)
         states = range(len(self.sigmas))
         self.state = np.random.choice(states, p=p)
 
-    def sample_position(self):
+    def _sample_position(self):
         """
         Sample the oscillator from a normal distribution centered on zero with a sigma given by the current state
 
@@ -96,9 +103,9 @@ class GaussianMixtureSwapper(object):
           the state will be recorded at every multiple of this number
 
         """
-        for iteration in range(niterations):
-            self.sample_position()
-            self.sample_state()
+        for iteration in range(1, niterations+1):
+            self._sample_position()
+            self._sample_state()
             if iteration % save_freq == 0:
                 self.nmoves += 1
                 self.state_counter[self.state] += 1
