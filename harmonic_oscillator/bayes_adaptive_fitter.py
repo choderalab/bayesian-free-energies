@@ -1,7 +1,7 @@
-#import numpy as np
 import autograd.numpy as np
 from autograd.scipy.misc import logsumexp
 from autograd import grad
+from scipy import optimize
 import emcee
 from copy import deepcopy
 
@@ -233,10 +233,10 @@ class MultinomialBayes(object):
             t *= a
         return t
 
-    def max_a_post(self, f_guess=None, max_iter=5000, precision=0.0001):
+    def _deprecated_map_estimator(self, f_guess=None, max_iter=5000, precision=0.0001):
         """
-        'Maximum a posteriori': returns the free energy that maximises the posterior density for observing the
-        state counts.
+        An old version of a maximum a posteriori estimator for the free energies, relative to state 1. This uses a
+        custom gradient decent algorithm.
 
         Parameter
         ---------
@@ -291,6 +291,53 @@ class MultinomialBayes(object):
 
         return f_guess
 
+    def map_estimator(self, f_guess=None, method='BFGS'):
+        """
+        Provides a maximum a posteriori estimate of the free energies, relative to state 1. 
+
+        Parameters
+        ----------
+        f_guess: numpy.ndarray
+            Vector of initial values of the free energies of each state. The first element will be ignored as free
+            energies will be relative to the first state
+        method: str
+            the 'method' parameter used in optimize.minimize
+
+        Returns
+        -------
+        fit.x: numpy.ndarray
+            vector of free energies relative to the first state
+        """
+        # Defining an internal log_posterior function to minimize for fitting.
+        if self.prior == 'gaussian':
+            def loss(f):
+                """
+                The negative log of the posterior with Gaussian priors on the free energies
+                """
+                return -self._log_likelihood(np.hstack((0.0, f))) - self._log_prior_gaussian(np.hstack((0.0, f)))
+        elif self.prior == 'laplace':
+            def loss(f):
+                """
+                The negative log of the posterior with Laplace priors on the free energies
+                """
+                return -self._log_likelihood(np.hstack((0.0, f))) - self._log_prior_laplace(np.hstack((0.0, f)))
+        elif self.prior == 'cauchy':
+            def loss(f):
+                """
+                The negative log of the posterior with Cauchy priors on the free energies
+                """
+                return -self._log_likelihood(np.hstack((0.0, f))) - self._log_prior_cauchy(np.hstack((0.0, f)))
+        else:
+            raise Exception('The prior "{0}" is not supported'.format(self.prior))
+
+        if f_guess is None:
+            f_guess = deepcopy(self.free_energies)
+            f_guess -= f_guess[0]
+
+        fit = optimize.minimize(loss, f_guess[1:], method=method)
+
+        return np.hstack((0.0, fit.x))
+
     def sample_posterior(self, nwalkers = 50, nmoves = 500, f_guess=None, ):
         """
         Sample from the posterior using the Emcee package. The initial starting point for the sampler is the
@@ -331,7 +378,8 @@ class MultinomialBayes(object):
 
         # Initialise the walkers
         if f_guess is None:
-            f_guess = self.max_a_post()
+            #f_guess = self.max_a_post()
+            f_guess = self.free_energies
 
         # The number of free parameters is len(f_guess - 1), as free energies will be relative to first.
         initial_positions = [f_guess[1:] + 1e-1*np.random.randn(len(f_guess) - 1) for i in range(nwalkers)]
