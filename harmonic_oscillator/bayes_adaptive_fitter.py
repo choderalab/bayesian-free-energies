@@ -9,7 +9,7 @@ class MultinomialBayes(object):
     """
     Class to estimate free energies from multinomial samples via Bayesian estimation
     """
-    def __init__(self, zetas, counts, free_energies=None, prior='gaussian', location=None, spread=None):
+    def __init__(self, zetas, counts, prior='gaussian', location=None, spread=None):
         """
         Parameters
         ----------
@@ -18,8 +18,6 @@ class MultinomialBayes(object):
         counts: numpy.ndarray
             the number of times the state was visited for a number of repeats, where the columns correspond to the states
             and rows repeats.
-        free_energies: numpy.ndarray
-            the initial guess of the free energies for each state, relative to the first
         prior: string
             the name of the prior distribution. Choice is between 'gaussian', 'laplace', and 'cauchy'
         location: float, numpy.ndarray
@@ -38,13 +36,15 @@ class MultinomialBayes(object):
             zetas = np.array([zetas])
             counts = np.array([counts])
 
-        self.zetas = zetas #- zetas[0, 0]
+        self.zetas = zetas
         self.counts = counts
 
-        # If no initial guess of the free energies is supplied, set the free energies to the relative counts
-        if free_energies is None:
-            self.free_energies = np.sum(self.zetas - np.log(self.counts + 0.1), axis=0)
-            self.free_energies -= self.free_energies[0]
+        # Pre-assignment to save the posterior samples
+        self.samples = []
+
+        # Set the initial guess of the free energies to the relative counts
+        self.free_energies = np.sum(self.zetas - np.log(self.counts + 0.1), axis=0)
+        self.free_energies -= self.free_energies[0]
 
         # parameters for the prior distribution
         if prior.lower() in ('gaussian', 'laplace', 'cauchy'):
@@ -87,66 +87,6 @@ class MultinomialBayes(object):
 
         return expected_counts
 
-    def _sum_of_squares(self, f):
-        """
-        The sum of squares for the predicted state counts for a given estimate of the relative free energies of the
-        states.
-
-        Parameters
-        ----------
-        f:numpy.ndarray
-            Estimate of the free energies for each state relative to the first (f[0])
-
-        Returns
-        -------
-        float
-            The sum of squares
-        """
-        prediction = self._expected_counts(f)
-        return np.sum((self.counts - prediction)**2)
-
-    def fit_least_squares(self, f_guess=None, max_iter=1000, precision=0.00001):
-        """
-        Predict the free energies of each state by minimizing the sum of squares of the observed and predicted counts.
-
-        Note
-        ----
-        This function uses `autograd`.
-
-        Returns
-        -------
-        free
-
-        """
-
-        if f_guess is None:
-            f_guess = deepcopy(self.free_energies)
-
-        def line_search(f, gradient, t=1.0, a=0.5):
-            """
-            Backtracking line search algorithm
-            """
-            loss = self._sum_of_squares(f)
-            while self._sum_of_squares(f - t * gradient) >= loss + a * t * np.sum(gradient**2) / 2:
-                t *= a
-            return t
-
-        # Creating a gradient function with autograd
-        training_grad = grad(self._sum_of_squares)
-
-        # Fit free energies by gradient decent
-        i = 1
-        step_max = precision * 100
-        while (i <= max_iter) and step_max >= precision:
-            g = training_grad(f_guess)
-            t = line_search(f_guess,g)
-            step = t*g[1:]
-            f_guess[1:] -= step
-            step_max = step.max()
-            i += 1
-            f_guess -= f_guess[0]
-        return f_guess
-
     def _log_prior_gaussian(self, f):
         """
         The log of prior for the normal distribution. The normalising constant is not required.
@@ -154,7 +94,7 @@ class MultinomialBayes(object):
         Parameter
         ---------
         f : float
-          the log of the ratio of normalising constants
+            the log of the ratio of normalising constants
 
         """
         return -np.sum(((f - self.location) ** 2) / (2.0 * self.spread ** 2))
@@ -166,7 +106,7 @@ class MultinomialBayes(object):
         Parameter
         ---------
         f : float
-          the log of the ratio of normalising constants
+            the log of the ratio of normalising constants
 
         """
         return -np.sum(np.absolute(f - self.location) / self.spread)
@@ -178,13 +118,13 @@ class MultinomialBayes(object):
         Parameter
         ---------
         f : float
-          the log of the ratio of normalising constants
+            the log of the ratio of normalising constants
 
         """
         #return -np.sum(np.log((f - self.location)**2 - self.spread**2))
         return -np.sum(np.log(1 + ((f - self.location)/self.spread)**2))
 
-    def _log_likelihood(self, f):
+    def _log_likelihood(self, f, scale=1.0):
         """
         The log likelihood of the counts, without terms proportional to the free energy.
         The normalisation constant discarded.
@@ -192,15 +132,17 @@ class MultinomialBayes(object):
         Parameter
         ---------
         f: numpy.ndarray
-          the vector of estimates for the free energy
+            the vector of estimates for the free energy
+        scale: float
+            the factor with which to diminish the counts due to correlated samples
 
         Returns
         -------
         l: float
           the log of the unnormalized likelihood
         """
-        rn = np.sum(self.counts, axis=0)    # Sum of the counts across the repeats at each zeta index
-        zn = np.sum(self.counts, axis=1)    # Sum of the counts across the zetas at each repeat
+        rn = np.sum(self.counts, axis=0) * scale    # Sum of the counts across the repeats at each zeta index
+        zn = np.sum(self.counts, axis=1) * scale    # Sum of the counts across the zetas at each repeat
         l = -np.sum(rn * f) - np.sum(zn * logsumexp(self.zetas - f, axis=1))
 
         return l
@@ -228,7 +170,6 @@ class MultinomialBayes(object):
         t: float
             final step size to be used in gradient decent
         """
-        #TODO: make it work better on multidimentional functions?
         while loss(f - t * gradient) >= loss(f) + a * t * np.sum(gradient**2) / 2:
             t *= a
         return t
@@ -293,7 +234,7 @@ class MultinomialBayes(object):
 
     def map_estimator(self, f_guess=None, method='BFGS'):
         """
-        Provides a maximum a posteriori estimate of the free energies, relative to state 1. 
+        Provides a maximum a posteriori estimate of the free energies, relative to state 1.
 
         Parameters
         ----------
@@ -336,17 +277,21 @@ class MultinomialBayes(object):
 
         fit = optimize.minimize(loss, f_guess[1:], method=method)
 
-        return np.hstack((0.0, fit.x))
+        self.free_energies = np.hstack((0.0, fit.x))
+
+        return fit.x
 
     def sample_posterior(self, nwalkers = 50, nmoves = 500, f_guess=None, ):
         """
         Sample from the posterior using the Emcee package. The initial starting point for the sampler is the
         least squares fit.
 
-        nwalkers : int
-          the number of walkers for the 'affine invarient sampler'
-        nmoves : int
-          the number of moves to perform with the 'affine invarient sampler'
+        nwalkers: int
+            the number of walkers for the 'affine invariant sampler'
+        nmoves: int
+            the number of moves to perform with the 'affine invarient sampler'
+        f_guess: numpy.ndarray
+            initial guess of the free energies of each state
 
         Returns
         -------
@@ -378,7 +323,7 @@ class MultinomialBayes(object):
 
         # Initialise the walkers
         if f_guess is None:
-            #f_guess = self.max_a_post()
+            self.map_estimator()
             f_guess = self.free_energies
 
         # The number of free parameters is len(f_guess - 1), as free energies will be relative to first.
@@ -387,4 +332,113 @@ class MultinomialBayes(object):
         sampler = emcee.EnsembleSampler(nwalkers, len(f_guess) - 1, log_posterior)
         sampler.run_mcmc(initial_positions, nmoves)
 
+        self.samples = sampler.chain
+
         return sampler.chain
+
+class BayesAdaptor(MultinomialBayes):
+    """
+    Class to generate biases and free energies estimates from multinomial samples.
+    """
+    def __init__(self, zetas, counts, prior='gaussian', location=None, spread=None):
+        """
+        Parameters
+        ----------
+        zetas: numpy.ndarray
+            the previous biasing potentials applied to each state, where the columns correspond to the states
+            and rows to the repeats.
+        counts: numpy.ndarray
+            the number of times the state was visited for a number of repeats, where the columns correspond to the states
+            and rows repeats.
+        free_energies: numpy.ndarray
+            the initial guess of the free energies for each state, relative to the first
+        prior: string
+            the name of the prior distribution. Choice is between 'gaussian', 'laplace', and 'cauchy'
+        location: float, numpy.ndarray
+            the location parameter of the prior for each free energy, e.g. the mean for 'gaussian'. If float, the same
+            value is applied to all free energies.
+        spread: float, numpy.ndarray
+            the spread parameter of the prior for each free energy, e.g. the standard deviation for 'gaussian'.
+            If float, the same value is applied to all free energies.
+        """
+
+        super(BayesAdaptor, self).__init__(zetas=zetas, counts=counts, prior=prior, location=location, spread=spread)
+
+        # The processed posterior samples
+        self.flat_samples = np.array(0)
+
+    def _flatten_samples(self, burnin=100):
+        """
+        Take samples from the Emcee generated posterior samples and collapse the walkers into single vectors of samples
+
+        Parameters
+        ----------
+        samples: numpy.ndarray
+            samples generated by Emcee via self.sample_posterior()
+        burnin: int
+            the number of initial samples from each walker to discard
+
+        Returns
+        -------
+        flat_samples: numpy.ndarray
+            Posterior samples for each free energy
+        """
+        self.flat_samples = self.samples[:, burnin:, :].reshape((-1, len(self.free_energies) - 1))
+        return self.flat_samples
+
+    def _park_update(self):
+        """
+        The update scheme by Park et. al
+        Returns
+        -------
+
+        """
+        pass
+
+    def gen_biases(self, method='thompson', burnin=100, logistic=False):
+        """
+        Generate biasing potentials given a set of free energy samples for adaptive sampling.
+
+        Note
+        ----
+        The methods 'mean', and 'median' are the respective averages of the marginal distribution of the
+        free energies. On the other hand, the 'thompson' sampling method draws a vector from the full posterior, and
+        'map' is the maximum a posteriori estimate from the full posterior.
+
+        Parameters
+        ----------
+        method: str
+            the manner in which the biases are generated
+        burnin: int
+            the number of initial samples to discard as burn-in
+        logistic: bool
+            whether to pass the  logistic sampling  biases as the location
+        Returns
+        -------
+
+        """
+        methods = ('thompson', 'map', 'park', 'mean', 'median')
+        if method.lower() not in methods:
+            raise Exception('Must select a method must be from {0}'.format(methods))
+
+        samples = self._flatten_samples(burnin=burnin)
+
+        if method == 'thompson':
+            index = np.random.choice(samples.shape[0])
+            biases = samples[index, :]
+        elif method == 'map':
+            f_guess = np.hstack((0.0, np.percentile(samples, 50, axis=0)))
+            biases = self.map_estimator(f_guess=f_guess)
+        elif method == 'median':
+            biases = np.percentile(samples, 50, axis=0)
+        elif method == 'mean':
+            biases = np.mean(samples, axis=0)
+        elif method == 'park':
+            biases = self._park_update()
+        else:
+            raise Exception('Must select a method must be from {0}'.format(methods))
+
+        if logistic:
+            biases = np.array([np.random.logistic(loc=f, scale=1, size=1)[0] for f in biases])
+
+        return biases
