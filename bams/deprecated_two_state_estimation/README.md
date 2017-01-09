@@ -1,7 +1,7 @@
 # Harmonic Oscillator Test
 **DEPRECATED**
 
-A preliminary, proof of principal, that expanded ensemble sampling with
+A preliminary, proof of principle, that expanded ensemble sampling with
 Bayesian estimation could be used for an adaptive method. The tools in
 this folder only work for systems with exactly two states. A harmonic
 oscillator example is explored.
