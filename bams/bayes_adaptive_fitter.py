@@ -7,7 +7,7 @@ from copy import deepcopy
 
 class MultinomialBayes(object):
     """
-    Class to estimate free energies from multinomial samples via Bayesian estimation
+    Class to estimate free energies from multinomial mixture samples via Bayesian estimation
     """
     def __init__(self, zetas, counts, prior='gaussian', location=None, spread=None):
         """
@@ -324,10 +324,14 @@ class MultinomialBayes(object):
         # Initialise the walkers
         if f_guess is None:
             self.map_estimator()
-            f_guess = self.free_energies
+            f_guess = deepcopy(self.free_energies)
 
-        # The number of free parameters is len(f_guess - 1), as free energies will be relative to first.
-        initial_positions = [f_guess[1:] + 1e-1*np.random.randn(len(f_guess) - 1) for i in range(nwalkers)]
+        # Distribute the walkers in a Gaussian ball within roughly 20% of the initial guess
+        scale = np.absolute(f_guess[1:])*0.2
+        initial_positions = [f_guess[1:] + scale * np.random.randn(len(f_guess) - 1) for i in range(nwalkers)]
+        # Note that the number of free parameters is len(f_guess - 1) as free energies are relative to first.
+
+
 
         sampler = emcee.EnsembleSampler(nwalkers, len(f_guess) - 1, log_posterior)
         sampler.run_mcmc(initial_positions, nmoves)
@@ -336,9 +340,12 @@ class MultinomialBayes(object):
 
         return sampler.chain
 
+
 class BayesAdaptor(MultinomialBayes):
     """
-    Class to generate biases and free energies estimates from multinomial samples.
+    Class to generate biases and free energies estimates from multinomial samples. To be used when
+    iterating between estimating free energies via expanded ensemble sampling and running new simulations
+    with new biases.
     """
     def __init__(self, zetas, counts, prior='gaussian', location=None, spread=None):
         """
@@ -388,9 +395,7 @@ class BayesAdaptor(MultinomialBayes):
 
     def _park_update(self):
         """
-        The update scheme by Park et. al
-        Returns
-        -------
+        The update scheme by Park et. al, which is a fast but approximate update scheme.
 
         """
         pass

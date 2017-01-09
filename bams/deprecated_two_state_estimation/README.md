@@ -1,7 +1,10 @@
 # Harmonic Oscillator Test
-**UNDER DEVELOPMENT**
+**DEPRECATED**
 
-A preliminary test of the online Bayesian free energy method.
+A preliminary, proof of principal, that expanded ensemble sampling with
+Bayesian estimation could be used for an adaptive method. The tools in
+this folder only work for systems with exactly two states. A harmonic
+oscillator example is explored.
 
 ## Contains
 * `harmonic_mixture_sampler.py`        Class to sample configurations and states from a mixture of harmonic oscillators

@@ -1,7 +1,6 @@
 """
 A set of tools that can be used in the bayesian adaptive estimation of free energies
-
-Gregory Ross
+and plotting of results.
 """
 import numpy as np
 
