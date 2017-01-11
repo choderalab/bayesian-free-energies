@@ -25,7 +25,6 @@ def strip_in_unit_system(quant, unit_system=unit.md_unit_system, compatible_with
     else:
         return quant
 
-
 class HarmonicSwapper(object):
     """
     Mixture sampling class for testing Bayesian Mixture Sampling on a 3D harmonic oscillator. Configurations are
