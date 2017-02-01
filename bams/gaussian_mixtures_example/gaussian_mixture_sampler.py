@@ -2,8 +2,36 @@ import numpy as np
 
 class GaussianMixtureSampler(object):
     """
-    Class to sample the configurations and states of a one-dimensional mixture of Gaussian distributions with a
-    different standard deviations.
+    Class to sample positions and states of a one-dimensional mixture of Gaussian distributions with a
+    different standard deviations. The mixture is of the form
+
+    p_i(x) = q_i(x)exp(z_i) / sum_i[q_i(x)exp(z_i)],
+
+    where x is the position, q_i is the unnormalized density of the ith Gaussian, and z_i is the exponentiated
+    weight of the ith element.
+
+    Example
+    -------
+    Initialize the standard deviations of the Gaussians that will make up the mixture
+    >>> sigmas = np.array((1.0, 10.0, 20.0, 30.0))
+
+    Specify the weights of the mixture.
+    >>> weights = np.array((1, 3, 10, 4))
+
+    The weights don't need to be normalized, but the class expects the exponential of the weights i.e.
+    >>> zetas = np.exp(weights)
+
+    Initialize the sampler
+    >>> sampler = GaussianMixtureSampler(sigmas=sigmas, zetas=zetas)
+
+    Sample positions and states (where state is a one of the Gaussians in the mixture) for 500 steps
+    and record the state every 10 steps.
+    >>> sampler.sampler_mixture(initerations=500, save_freq=10):
+
+    One iteration corresponds to an independence sample from the current state and a Gibbs sample of the state.
+    current. View the number of times a visit to a state was recorded
+    >>> print sampler.state_counter
+
     """
     def __init__(self, sigmas = np.arange(1,100,10), zetas = None):
         """
