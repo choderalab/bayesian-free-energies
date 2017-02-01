@@ -27,7 +27,7 @@ The tools and examples contained here, particularly the
 of normalizing constants within expanded ensembles (i.e. mixture distributions)
 of comprised of $K$ distributions that are in the following form:
 
-$$ p(x, l=i| \zeta) = \frac{q_i(x)\exp(\zeta_i)}{\sum^K_{j=1}Z_j\exp(\zeta_j)} $$
+$ p(x, l=i| \zeta) = \frac{q_i(x)\exp(\zeta_i)}{\sum^K_{j=1}Z_j\exp(\zeta_j)} $
 
 where $x$ is the configuration, $i$ the state, $\zeta_i$ is a user
 defined biasing potential of the $i$th state, $q_i(x)$ is the 

@@ -7,7 +7,52 @@ from copy import deepcopy
 
 class MultinomialBayes(object):
     """
-    Class to estimate free energies from multinomial mixture samples via Bayesian estimation
+    Class to estimate free energies from multinomial mixture samples via Bayesian estimation.
+
+    The tools in this class can calculate the ratios of normalizing constants for mixtures of the following
+    form:
+
+        p_i(x) = q_i(x) * exp(zeta_i) / sum_i[Z_i * exp(zeta_i)],
+
+    where x is the configuration, q_i(x) is the unnormalized density of the ith distribution, Z_i is normalizing
+    constant of the ith distribution and zeta_i is the exponentiated weight of the ith element. We are interested
+    in calculating the ratios Z_i/Z_j.
+
+    With a method that can sample over the states and configurations of p_i(x), this class can estimate the
+    logarithm of the ratios Z_i/Z_j using the counts for the number of times each state was visited by the
+    sampler.
+
+    This is because the marginal over the configurations, given by
+
+        p_i = Z_i * exp(zeta_i) / sum_i[Z_i * exp(zeta_i)],
+
+    is a multinomial distribution over the states, such that the likelihood function for the normalizing constants
+    is known exactly. This is the idea behind this tool.
+
+    Examples
+    --------
+    A mixture sampler provides the following counts for each state
+    >>> counts = np.array((10, 103, 243, 82))
+
+    It is assumed that these counts are from independent samples. These samples were generated with
+    the following exponentiated biases applied to each state
+    >>> zetas = np.array((10.0, 30.0, 43.0, 28.0))
+
+    With this information, we can estimate the logarithm of each normalizing constant (free energy) up to an factor.
+    Being a Bayesian method, we must provide prior information on what the free energies. Let's choose broad Gaussians:
+    >>> fitter = MultinomialBayes(zetas=zetas, counts=counts, prior='gaussian', location=0, spread=100)
+
+    Estimate the MAP estimate for the free energies
+    >>> print fitter.map_estimator()
+
+    Sample from the posterior with emcee:
+    >>> samples = fitter.sample_posterior()
+
+    Analyze to your hearts content.
+
+    Multiple samples with different biases can also be added by stacking the data, i.e
+    >>> counts = np.vstack(((10, 103, 243, 82), (30, 11, 23, 72)))
+    >>> zetas = np.vstack(((10.0, 30.0, 43.0, 28.0), (4.0, 14.0, 36.0, 81.0)))
     """
     def __init__(self, zetas, counts, prior='gaussian', location=None, spread=None):
         """

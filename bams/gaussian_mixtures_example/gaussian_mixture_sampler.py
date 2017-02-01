@@ -5,10 +5,10 @@ class GaussianMixtureSampler(object):
     Class to sample positions and states of a one-dimensional mixture of Gaussian distributions with a
     different standard deviations. The mixture is of the form
 
-    p_i(x) = q_i(x)exp(z_i) / sum_i[q_i(x)exp(z_i)],
+        p_i(x) = q_i(x) * exp(zeta_i) / sum_i[Z_i * exp(zeta_i)],
 
-    where x is the position, q_i is the unnormalized density of the ith Gaussian, and z_i is the exponentiated
-    weight of the ith element.
+    where x is the position, q_i is the unnormalized density of the ith Gaussian, Z_i is normalizing
+    constant of the ith distribution and zeta_i is the exponentiated weight of the ith element.
 
     Example
     -------
