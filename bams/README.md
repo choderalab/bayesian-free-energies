@@ -13,30 +13,31 @@ states using the number of times a system visited those states. Say,
 for example, that the state state space of system is divided into 4. 
 During an unbiased simulation the system visits each of the for states the
 following number of times:
-
->>> counts = np.array((10, 103, 243, 82))
-
+```
+counts = np.array((10, 103, 243, 82))
+```
 It is assumed that these counts are from independent samples. We'll note
 the fact that the system was unbiased by recording the exponentiated 
 weights applied to each state:
 
->>> weights = np.array((0.0, 0.0, 0.0, 0.0))
-
+```
+weights = np.array((0.0, 0.0, 0.0, 0.0))
+```
 With this information, we can estimate the relative free energies using
 Bayesian inference. The free energies will be relative the first state.
 We'll choose the prior for the free energies to be broad Gaussians:
-
->>> fitter = MultinomialBayes(zetas=zetas, counts=counts, prior='gaussian', location=0, spread=50)
-
+```
+fitter = MultinomialBayes(zetas=zetas, counts=counts, prior='gaussian', location=0, spread=50)
+```
 We can now estimate the maximum a posterior (MAP) estimate for the free
 energies:
-
->>> print fitter.map_estimator()
-
+```
+print fitter.map_estimator()
+```
 We can go further and sample from the posterior with the package `emcee`:
-
->>> samples = fitter.sample_posterior()
-
+```
+samples = fitter.sample_posterior()
+```
 ## Dependencies
 * numpy
 * scipy
