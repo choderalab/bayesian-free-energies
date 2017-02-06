@@ -1,8 +1,49 @@
 # Bayesian Adjusted Mixture Sampling
 Tools and examples for adaptive Bayesian estimation of free energies in
-expanded ensembles.
+expanded ensembles. For a detailed description of what this package is 
+designed for, please see `theoretical_notes/BAMS in brief.ipynb`.
 
-## Contains
+The classes `MultinomialBayes` and `BayesAdaptor` contained in `bayes_adaptive_fitter.py` provides Bayesian
+methods for the estimation of free energies using histogram data from simulations
+
+## Quick examples 
+### bayes_adaptive_fitter.MultinomialBayes
+The class `MultinomialBayes` calculates the relative free energies of 
+states using the number of times a system visited those states. Say,
+for example, that the state state space of system is divided into 4. 
+During an unbiased simulation the system visits each of the for states the
+following number of times:
+
+>>> counts = np.array((10, 103, 243, 82))
+
+It is assumed that these counts are from independent samples. We'll note
+the fact that the system was unbiased by recording the exponentiated 
+weights applied to each state:
+
+>>> weights = np.array((0.0, 0.0, 0.0, 0.0))
+
+With this information, we can estimate the relative free energies using
+Bayesian inference. The free energies will be relative the first state.
+We'll choose the prior for the free energies to be broad Gaussians:
+
+>>> fitter = MultinomialBayes(zetas=zetas, counts=counts, prior='gaussian', location=0, spread=50)
+
+We can now estimate the maximum a posterior (MAP) estimate for the free
+energies:
+
+>>> print fitter.map_estimator()
+
+We can go further and sample from the posterior with the package `emcee`:
+
+>>> samples = fitter.sample_posterior()
+
+## Dependencies
+* numpy
+* scipy
+* emcee
+* autograd (dependency to be removed soon)
+
+## Contents
 ### Files
 ```
 bayes_adaptive_fitter.py    Classes for adaptive Bayesian inference of free energies
@@ -20,31 +61,3 @@ gaussian_mixture_example/    Demonstration of bayes_adaptive_fitter to Gaussian 
 depracted_two_state_estimation/  Initial proof of principle with a two state harmonic oscillator
 ```
 
-
-## Notes
-The tools and examples contained here, particularly the 
-`BayesianAdaptor` class, are designed to adaptively infer the relative ratios 
-of normalizing constants within expanded ensembles (i.e. mixture distributions)
-of comprised of $K$ distributions that are in the following form:
-
-$ p(x, l=i| \zeta) = \frac{q_i(x)\exp(\zeta_i)}{\sum^K_{j=1}Z_j\exp(\zeta_j)} $
-
-where $x$ is the configuration, $i$ the state, $\zeta_i$ is a user
-defined biasing potential of the $i$th state, $q_i(x)$ is the 
-unnormalized density of the $i$th distribution, and $Z_i$ is the 
-respective normalizing constant. We are concerned with estimating the 
-ratios $Z_i/Z_0 \, i \neq 0$. 
-
-By defining the free energy of the $i$th state as
-
-$$ f_i = -\ln(Z_i) $$
-
-we can write the marginal of $p(x, l=i| \zeta)$ over $x$ as 
-
-$$ p(l=i | \zeta) = \frac{\exp(\zeta_i - f_i)}{\sum_{j=1}^{K} \exp(\zeta_j - f_j)} $$
-
-This marginal is a multinomial distribution over the states, which 
-allows for Bayesian inference of the $f_i$s (and thus $Z_i$) relative to
-the 0th state. The `MultinomialBayes` class is designed for inference of
-free energies with such distributions, and takes as input the counts in 
-each state and the applied biases to return Bayesian estimates of the relative $f_i$s.
