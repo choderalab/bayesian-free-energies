@@ -197,3 +197,23 @@ class GaussianMixtureSampler(object):
         """
         self.state_counter = np.zeros(len(self.sigmas))
         self.nmoves = 0
+
+
+def gen_sigmas(sigma1, f):
+    """
+    Generate standard deviations for one-dimensional Gaussian distributions by the relative free energy of the
+    normalizing constants.
+
+    Parameters
+    ----------
+    sigma1: float
+        the standard deviation from which all other standard deviations are calculated relative to
+    f: numpy.ndarray or float
+        the relative free energy of the other Gaussian distributions to sigma1
+
+    Returns
+    -------
+    numpy.ndarray
+        vector of standard deviations
+    """
+    return sigma1 * np.exp(-f)
