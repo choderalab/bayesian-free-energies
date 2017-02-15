@@ -80,14 +80,19 @@ if __name__ == "__main__":
                         help="the number of cycles of state sampling and inferece", default=50)
     parser.add_argument('-m', '--method', type=str, help="the method used to select the sampling biases",
                         choices=['thompson', 'map', 'mean', 'median'], default='map')
+    parser.add_argument('--t_spread', type=float,
+                        help='The minimum and maximum values from which the target free energies are drawn from', default=200.0)
+    parser.add_argument('--p_spread', type=float,
+                        help='The standard deviation of prior on the free energies', default=100.0)
+
     args = parser.parse_args()
 
     # Running BAMS over many repeats
     bias = []
     variance = []
     for r in range(args.repeats):
-        f_true = -np.random.uniform(-200,200,size=1)
-        b, v = run_bams_example('gaussian', spread=100.0, location=0.0, f_true=f_true, method=args.method,
+        f_true = -np.random.uniform(-args.t_spread,args.t_spread,size=1)
+        b, v = run_bams_example('gaussian', spread=args.p_spread, location=0.0, f_true=f_true, method=args.method,
                                 ncycles=args.cycles, nsamps=1)
         bias.append(b)
         variance.append(v)

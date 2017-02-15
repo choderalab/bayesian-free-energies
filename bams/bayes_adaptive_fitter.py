@@ -435,6 +435,8 @@ class BayesAdaptor(MultinomialBayes):
         flat_samples: numpy.ndarray
             Posterior samples for each free energy
         """
+        #TODO: add automatic equilibrium detection
+
         self.flat_samples = self.samples[:, burnin:, :].reshape((-1, len(self.free_energies) - 1))
         return self.flat_samples
 
