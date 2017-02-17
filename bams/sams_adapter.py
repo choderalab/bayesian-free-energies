@@ -2,7 +2,7 @@ import numpy as np
 
 class SAMSAdaptor(object):
     """
-    Implements the update scheme for self adjusted mixture sampling
+    Implements the update scheme for self adjusted mixture sampling.
     """
     def __init__(self, nstates, zetas=None, target_weights=None, mode='two-stage', beta=0.6, flat_hist=0.2):
         """
@@ -32,23 +32,20 @@ class SAMSAdaptor(object):
             else:
                 self.target_weights = target_weights
 
-        self.stage = 'burn-in'
+        self.burnin = True
         self.time = 1
-        self.burn_in_length = None
+        self.burnin_length = None
 
     def _calc_gain(self, state):
         """
-
-        :param stage:
-        :param state:
-        :return:
+        Calculate the gain factor for update
         """
 
         if self.mode == 'two-stage':
-            if self.stage == 'burn-in':
+            if self.burnin:
                 gain = np.min((self.target_weights[state], self.time ** (-self.beta)))
             else:
-                factor = (self.time - self.burn_in_length + self.burn_in_length ** (-self.beta)) ** (-1)
+                factor = (self.time - self.burnin_length + self.burnin_length ** (-self.beta)) ** (-1)
                 gain = np.min((self.target_weights[state], factor))
         else:
             gain = 1.0 / self.time
@@ -57,24 +54,21 @@ class SAMSAdaptor(object):
 
     def update(self, state, noisy_observation, histogram=None):
         """
-
-        :param current_state:
-        :param histogram:
-        :return:
+        Update the estimate of the free energy
         """
         if self.mode == 'two-stage':
-            if self.stage == 'burn-in' and histogram is not None:
+            if self.burnin and histogram is not None:
                 # Calculate how far the histogram is from the target weights
                 fraction = 1.0 * histogram / np.sum(histogram)
                 dist = np.mean(np.absolute(fraction - self.target_weights) / self.target_weights)
                 if dist <= self.flat_hist:
                     # If histogram appears suitably flat then switch to slow growth
-                    self.stage = 'slow-growth'
-                    self.burn_in_length = self.time
-            elif self.stage == 'burn-in' and histogram is None:
+                    self.burnin = False
+                    self.burnin_length = self.time
+            elif self.burnin and histogram is None:
                 # If no histogram is supplied the update scheme switches to slow growth
-                self.stage = 'slow-growth'
-                self.burn_in_length = self.time
+                self.burnin = False
+                self.burnin_length = self.time
 
         gain = self._calc_gain(state)
         zetas_half = self.zetas + gain * noisy_observation
