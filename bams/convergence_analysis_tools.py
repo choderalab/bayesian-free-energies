@@ -1,6 +1,6 @@
 import numpy as np
 from copy import deepcopy
-from bams.testsystems import *
+from bams.example_systems import *
 from bams.bayes_adaptor import BayesAdaptor
 from bams.sams_adapter import SAMSAdaptor
 
@@ -53,7 +53,7 @@ def rb_mse_gaussian(sigmas, niterations, nmoves=1, save_freq=1, beta=0.6, flat_h
     niterations: int
         The number of iterations of mixture sampling and SAMS updates that will be performed
     nmoves: int
-        The number of moves from the Gaussian Gibbs sampler. One position sample and state sample
+        The number of moves from the Gaussian Gibbs sampler. One position step and state step
         constitute one move.
     save_freq: int
         The frequency with which to save the state in the Gaussian mixture sampler, used to decorrelate trajectory
@@ -77,7 +77,7 @@ def rb_mse_gaussian(sigmas, niterations, nmoves=1, save_freq=1, beta=0.6, flat_h
 
     mse = np.zeros((niterations))
     for i in range(niterations):
-        generator.sample(nmoves, save_freq)
+        generator.step(nmoves, save_freq)
         state = generator.state
         noisy = generator.weights
         z = -adaptor.update(state=state, noisy_observation=noisy, histogram=generator.histogram)
@@ -97,7 +97,7 @@ def binary_mse_gaussian(sigmas, niterations, nmoves=1, save_freq=1, beta=0.6, fl
     niterations: int
         The number of iterations of mixture sampling and SAMS updates that will be performed
     nmoves: int
-        The number of moves from the Gaussian Gibbs sampler. One position sample and state sample
+        The number of moves from the Gaussian Gibbs sampler. One position step and state step
         constitute one move.
     save_freq: int
         The frequency with which to save the state in the Gaussian mixture sampler, used to decorrelate trajectory
@@ -121,7 +121,7 @@ def binary_mse_gaussian(sigmas, niterations, nmoves=1, save_freq=1, beta=0.6, fl
 
     mse = np.zeros((niterations))
     for i in range(niterations):
-        noisy = generator.sample(nmoves, save_freq)
+        noisy = generator.step(nmoves, save_freq)
         state = generator.state
         z = -adaptor.update(state=state, noisy_observation=noisy, histogram=generator.histogram)
         generator.zetas = z
@@ -140,7 +140,7 @@ def bayes_mse_gaussian(sigmas, niterations, nmoves=1, save_freq=1, method='thomp
     niterations: int
         The number of iterations of mixture sampling and SAMS updates that will be performed
     nmoves: int
-        The number of moves from the Gaussian Gibbs sampler. One position sample and state sample
+        The number of moves from the Gaussian Gibbs sampler. One position step and state step
         constitute one move.
     save_freq: int
         The frequency with which to save the state in the Gaussian mixture sampler, used to decorrelate trajectory
@@ -154,11 +154,11 @@ def bayes_mse_gaussian(sigmas, niterations, nmoves=1, save_freq=1, method='thomp
     """
     # Initialize the sampler
     generator = GaussianMixtureSampler(sigmas=sigmas)
-    generator.sample(nmoves, save_freq)
+    generator.step(nmoves, save_freq)
     histogram = generator.histogram
     generator.reset_statistics()
     # Intialize the Bayesian adaptor
-    adaptor = BayesAdaptor(generator.zetas, histogram, method=method)
+    adaptor = BayesAdaptor(counts=histogram, zetas=generator.zetas, method=method)
 
     # The target free energy
     f_true = -np.log(sigmas)
@@ -170,7 +170,7 @@ def bayes_mse_gaussian(sigmas, niterations, nmoves=1, save_freq=1, method='thomp
         z = adaptor.update(nwalkers=enwalkers, nmoves=enmoves)
         generator.zetas = z
         # Sample from Gaussian mixture, recording the histogram
-        generator.sample(nmoves, save_freq)
+        generator.step(nmoves, save_freq)
         h = deepcopy(generator.histogram)
         generator.reset_statistics()
         # Keep track of new counts and biases
@@ -185,7 +185,7 @@ def bayes_mse_gaussian(sigmas, niterations, nmoves=1, save_freq=1, method='thomp
 
 #---Functions to compute SAMS and BAMS mean-squared error using the `IndependentMultinomialSamper`---#
 
-def multinomial_sams_error(repeats, niterations, f_range, beta, nstates=2):
+def binary_mse_multinomial(repeats, niterations, f_range, beta, nstates=2):
     """
     Function to compute the mean-squared error of the SAMS binary update scheme when drawing samples from
     the multinomial distribution. Over many repeats, target free energies will be drawn randomly and uniformly
@@ -208,28 +208,27 @@ def multinomial_sams_error(repeats, niterations, f_range, beta, nstates=2):
     for r in range(repeats):
         f_true = np.random.uniform(low=-f_range / 2.0, high=f_range / 2.0, size=nstates)
         f_true -= f_true[0]
-        sigmas = gen_sigmas(sigma1=1, f=f_true)
 
         generator = IndependentMultinomialSamper(free_energies=f_true)
         adaptor = SAMSAdaptor(nstates=nstates, beta=beta)
 
         for i in range(niterations):
-            noisy = generator.sample()
+            noisy = generator.step()
             state = np.where(noisy != 0)[0][0]
             z = -adaptor.update(state=state, noisy_observation=noisy, histogram=generator.histogram)
             generator.zetas = z
             binary_aggregate_msd[r, i] = np.mean((f_true - z) ** 2)
     return binary_aggregate_msd
 
-
-
-def run_bams_example(prior, spread, location, f_true, method, logistic=False, ncycles=50, nsamps=1, enmoves=200,
-                     enwalkers=50):
+def bayes_mse_multinomial(niterations, prior, spread, location, f_true, method, logistic=False, nsamps=1, enmoves=200,
+                           enwalkers=50):
     """
     Function to estimate the bias and variance of the BAMS method as a function of iteration
 
     Parameters
     ----------
+    ncycles = int
+        The number of iterations for state sampling and adaptive estimation
     prior = str
         The type of prior used, either 'gaussian', 'laplace', or 'cauchy'
     spread = numpy array
@@ -240,8 +239,6 @@ def run_bams_example(prior, spread, location, f_true, method, logistic=False, nc
         The method used in the update procedure, either 'thompson' or 'map'
     logistic = bool
         Whether to convolute the bias generation procedure with the logisitic distribution
-    ncycles = int
-        The number of iterations for state sampling and adaptive estimation
     nsamps = int
         The number of state samples generated per cycle
     enmoves = int
@@ -257,27 +254,28 @@ def run_bams_example(prior, spread, location, f_true, method, logistic=False, nc
         The variance of the posterior distribution at each stage of the iteration
 
     """
-    #TODO: Fix this function to relect most recent refactoring of BayesAdaptor
     # Generating the true state probabilities:
     p = np.hstack((1, np.exp(-f_true)))
     p = p / np.sum(p)
+
     # Pre-assigment
     map_estimate = []
     zetas = [np.repeat(0, len(f_true) + 1)]  # Starting the initial bias at zero
     counts = []
     variance = []
+
     # Online estimation of free energies:
-    for i in range(ncycles):
+    for i in range(niterations):
         # Sample from multinomial
         q = p * np.exp(zetas[-1])
         q = q / np.sum(q)
         counts.append(np.random.multinomial(nsamps, q))
         # Sample from the posterior
         adaptor = BayesAdaptor(zetas=np.array(zetas), counts=np.array(counts), prior=prior, spread=spread,
-                               location=location)
-        adaptor.sample_posterior(nwalkers=enwalkers, nmoves=enmoves)
+                               location=location, logistic=logistic)
+        new_zeta = adaptor.update(nwalkers=enwalkers, nmoves=enmoves)
         # Sample a new biasing potential
-        zetas.append(np.hstack((0.0, adaptor.gen_biases(method=method, logistic=logistic))))
+        zetas.append(new_zeta)
         # Collect data
         f_guess = np.hstack((0.0, adaptor.flat_samples.mean(axis=0)))
         map_estimate.append(adaptor.map_estimator(f_guess=f_guess))

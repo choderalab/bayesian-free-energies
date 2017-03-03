@@ -1,6 +1,12 @@
 import numpy as np
 from bams.example_systems import GaussianMixtureSampler, IndependentMultinomialSamper
 
+"""
+Tests for mixture sampling examples. These example samplers are used to test and demonstrate Bayesian adaptive mixture
+sampling (BAMS) as well as self adjusted mixture sampling (SAMS).
+
+Author: Gregory Ross
+"""
 
 class TestGaussianSampler(object):
     """

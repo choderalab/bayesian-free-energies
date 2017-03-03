@@ -8,6 +8,27 @@ class IndependentMultinomialSamper(object):
 
     where f_i and zeta_i are the free energy and applied bias the free energy of ith state, respectively. The unbiased
     distribution has propabilities proportional to exp(-f_i).
+
+    Example
+    -------
+    Specify the free energy difference between each state
+    >>> free_energies = np.array((0.0, -10.0))
+
+    Specify the biases to be applied to each state
+    >>> biases = np.array((0.0, 0.0))
+
+    Initialize the sampler
+    >>> sampler = IndependentMultinomialSamper(free_energies=free_energies, zetas=biases)
+
+    Take 200 uncorrelated global jumps over the states and record the current location in state_vector
+    >>> state_vector = generator.step(nsteps=200)
+
+    The array state_vector is a binary vector with the only non-zero element at the current state of the system. The
+    index of the non-zero element is given by
+    >>> print(sampler.state)
+
+    View how many times each state was visited over all the steps:
+    >>> print(sampler.histogram)
     """
     def __init__(self, free_energies=None, zetas=None):
         """

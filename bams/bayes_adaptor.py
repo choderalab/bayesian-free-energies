@@ -321,17 +321,75 @@ class BayesAdaptor(MultinomialBayesEstimator):
     Class to generate biases and free energies estimates from multinomial samples. To be used when
     iterating between estimating free energies via expanded ensemble sampling and running new simulations
     with new biases.
+
+    Example
+    -------
+    Let's imagine we've run an unbiased simulation over states and configurations. We thin the trejector to produce
+    approximately uncorrelated samples in state space, and observe the counts in the histogram over the states
+    >>> counts  = np.array((10, 103, 200))
+
+    Clearly there are 3 states in the system. We seek to simultaneously estimate the free energy for each state and
+    produce biases that can be applied to an upcoming simulation in order to maximally reduce the uncertainty on the
+    current estimates of the free energies. This class handles that task.
+
+    First, we must initialize the class with the above histogram counts, our prior information of the relative free
+    energies and the type of Bayesian update scheme we want.
+    >>> adaptor = BayesAdaptor(counts=counts, method='map', prior='gaussian', spread=100.0, location=0.0)
+
+    In the above, we've specified that we want our adaptor to choose biases based on MAP estimate of the free energy.
+    We've also placed a Gaussian prior of mean 0 and standard deviation of 100 for our relative free
+    energies: this is equivalent to saying that we're 95% sure that the true free energies are between -200 and +200
+    and tightly peaked around zero. If our previous work indicated that the prior should be 'flatter', we can choose
+    prior='laplace' or even prior='cauchy'.
+
+    Let's sample from the posterior, get the MAP estimate, and produce biases for the next set of simulations:
+    >>> new_bias = adaptor.update(sample_posterior=True)
+
+    We've used to the flag sample_posterior=True to indicate that we wish to sample from the posterior distribution.
+    The MAP estimate is obtained via gradient decent, but by specifying that we want sample from the posterior ensures
+    that the starting point for gradient decent is the posterior mean.
+
+    As we've set method='map', new_bias is simulatanoesly an estimate for the free energy *and* that bias that should
+    be applied in the next simulation.
+
+    If we wanted to do thompson sampling to pick our next bias, i.e.
+    >>> adaptor.method = 'thompson'
+    >>> new_biases = adaptor.update()
+
+    Then new_biases are not good estimates of the free energies, either the MAP or mean will be better:
+    >>> mean_estimates = np.hstack((0.0, np.mean(adaptor.flat_samples, axis=0)))
+
+    The estimated free energies are all calculated to the first state, which is zero and not sampled over. This is why
+    in the above we've added a 0.0 to the vector of means. The MAP estimate based on the mean estimates is then:
+    >>> map_estimates = adaptor.map_estimator(f_guess=mean_estimates)
+
+    The point of using method='thompson' is that it may result in estimates of lower variance in fewer iterations of
+    sampling and bias generation than method='mean' or method='map'.
+
+    Now let's say we applied our new_bias to our simulation. We thin the data and observe new counts
+    >>> new_counts = np.array((49, 25, 33))
+
+    We should update our adaptor with this new information, along with the bias we applied:
+    >>> adaptor.zetas = np.vstack((adaptor.zetas, new_biases))
+    >>> adaptor.counts = np.vstack((adaptor.counts, new_counts))
+
+    The next bias for the next simulation can then be estimated:
+    >>> new_bias = adaptor.update()
+
+    Apply these biases to the next simulation, count the number of times each state was visited and repeat the adaptive
+    procedure.
     """
-    def __init__(self, counts, zetas=None, method='thompson', logistic=False, prior='gaussian', location=None, spread=None):
+    def __init__(self, counts, zetas=None, method='thompson', logistic=False, prior='gaussian', location=None,
+                 spread=None):
         """
         Parameters
         ----------
-        zetas: numpy.ndarray
-            the previous biasing potentials applied to each state, where the columns correspond to the states
-            and rows to the repeats.
         counts: numpy.ndarray
             the number of times the state was visited for a number of repeats, where the columns correspond to the states
             and rows repeats.
+        zetas: numpy.ndarray
+            the previous biasing potentials applied to each state, where the columns correspond to the states
+            and rows to the repeats.
         method: string
             the method used to generate new biases for adaptive free energy estimation.
             Either 'thompson', 'map', 'mean', or 'median'.
@@ -364,7 +422,7 @@ class BayesAdaptor(MultinomialBayesEstimator):
 
     def _flatten_samples(self, burnin=100):
         """
-        Take samples from the Emcee generated posterior samples and collapse the walkers into single vectors of samples
+        Take samples from the Emcee generated posterior samples and collapse the walkers into a single vector of samples
 
         Parameters
         ----------
