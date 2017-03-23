@@ -1,13 +1,12 @@
-import autograd.numpy as np
-from autograd.scipy.misc import logsumexp
-from autograd import grad
+import numpy as np
 from scipy import optimize
+from scipy.misc import logsumexp
 import emcee
 from copy import deepcopy
 
-class MultinomialBayes(object):
+class MultinomialBayesEstimator(object):
     """
-    Class to estimate free energies from multinomial mixture samples via Bayesian estimation.
+    Class to estimate free energies from multinomial mixture samples via Bayesian estisation.
 
     The tools in this class can calculate the ratios of normalizing constants for mixtures of the following
     form:
@@ -18,7 +17,7 @@ class MultinomialBayes(object):
     constant of the ith distribution and zeta_i is the exponentiated weight of the ith element. We are interested
     in calculating the ratios Z_i/Z_j.
 
-    With a method that can sample over the states and configurations of p_i(x), this class can estimate the
+    With a method that can step over the states and configurations of p_i(x), this class can estimate the
     logarithm of the ratios Z_i/Z_j using the counts for the number of times each state was visited by the
     sampler.
 
@@ -40,7 +39,7 @@ class MultinomialBayes(object):
 
     With this information, we can estimate the logarithm of each normalizing constant (free energy) up to an factor.
     Being a Bayesian method, we must provide prior information on what the free energies. Let's choose broad Gaussians:
-    >>> fitter = MultinomialBayes(zetas=zetas, counts=counts, prior='gaussian', location=0, spread=100)
+    >>> fitter = MultinomialBayesEstimator(zetas=zetas, counts=counts, prior='gaussian', location=0, spread=100)
 
     Estimate the MAP estimate for the free energies
     >>> print fitter.map_estimator()
@@ -54,15 +53,15 @@ class MultinomialBayes(object):
     >>> counts = np.vstack(((10, 103, 243, 82), (30, 11, 23, 72)))
     >>> zetas = np.vstack(((10.0, 30.0, 43.0, 28.0), (4.0, 14.0, 36.0, 81.0)))
     """
-    def __init__(self, zetas, counts, prior='gaussian', location=None, spread=None):
+    def __init__(self, counts, zetas=None, prior='gaussian', location=None, spread=None):
         """
         Parameters
         ----------
-        zetas: numpy.ndarray
-            the biasing potentials applied to each state, where the columns correspond to the states and rows repeats.
-        counts: numpy.ndarray
+        counts: numpy.ndarray or list
             the number of times the state was visited for a number of repeats, where the columns correspond to the states
             and rows repeats.
+        zetas: numpy.ndarray or list
+            the biasing potentials applied to each state, where the columns correspond to the states and rows repeats.
         prior: string
             the name of the prior distribution. Choice is between 'gaussian', 'laplace', and 'cauchy'
         location: float, numpy.ndarray
@@ -73,16 +72,33 @@ class MultinomialBayes(object):
             If float, the same value is applied to all free energies.
         """
 
-        if zetas.shape != counts.shape:
+        # Carefully formatting the histogram count matrix so that rows match the applied biasing potentials
+        if type(counts) == list:
+            self.counts = np.array(counts)
+        elif type(counts) == np.ndarray:
+            if counts.ndim == 1:
+                self.counts = np.array([counts])
+            else:
+                self.counts = counts
+        else:
+            raise Exception('The histogram counts must have the format of either a list or a numpy array')
+
+        # Formatting the bias potentials to match the counts. The (i,j) element of the count matrix should be the
+        # counts that resulted from the application of the (i,j)th bias.
+        if zetas is None:
+            self.zetas = np.zeros(self.counts.shape)
+        elif type(zetas) == list:
+            self.zetas = np.array(zetas)
+        elif type(zetas) == np.ndarray:
+            if zetas.ndim == 1:
+                self.zetas = np.array([zetas])
+            else:
+                self.zetas = zetas
+        else:
+            raise Exception('The biases must have the format of either a list or a numpy array')
+
+        if self.zetas.shape != self.counts.shape:
             raise Exception('Error: the dimensions of the biasing potentials and state counts must match')
-
-        # Formatting all input data into a matrix with the number of rows equals the number of repeats
-        if zetas.ndim == 1:
-            zetas = np.array([zetas])
-            counts = np.array([counts])
-
-        self.zetas = zetas
-        self.counts = counts
 
         # Pre-assignment to save the posterior samples
         self.samples = []
@@ -192,94 +208,9 @@ class MultinomialBayes(object):
 
         return l
 
-    def _line_search(self, loss, f, gradient, t=1.0, a=0.5):
-        """
-        Backtracking line search algorithm used in self.max_a_post. Determines a suitable step size to take during
-        gradient decent.
-
-        Parameters
-        ----------
-        loss: function
-            the loss function to be minimized
-        f: numpy.ndarray
-            the vector of free energies
-        gradient: numpy.ndarray
-            the vector gradient (grad) of the log posterior at f
-        t: float
-            initial step size for gradient decent
-        a: float, should be 0 < a < 1
-            factor that t decreases decreases by at each iteration
-
-        Returns
-        -------
-        t: float
-            final step size to be used in gradient decent
-        """
-        while loss(f - t * gradient) >= loss(f) + a * t * np.sum(gradient**2) / 2:
-            t *= a
-        return t
-
-    def _deprecated_map_estimator(self, f_guess=None, max_iter=5000, precision=0.0001):
-        """
-        An old version of a maximum a posteriori estimator for the free energies, relative to state 1. This uses a
-        custom gradient decent algorithm.
-
-        Parameter
-        ---------
-        f_guess : float
-          initial guess of the free energy difference
-
-        Returns
-        -------
-
-        f_optimised : float
-          the fitted free energy difference
-        """
-        if f_guess is None:
-            f_guess = deepcopy(self.free_energies)
-
-        # Defining an internal loss function to minimize for fitting.
-        if self.prior == 'gaussian':
-            def loss(f):
-                """
-                The negative log of the posterior with Gaussian priors on the free energies
-                """
-                return -self._log_likelihood(f) - self._log_prior_gaussian(f)
-        elif self.prior == 'laplace':
-            def loss(f):
-                """
-                The negative log of the posterior with Laplace priors on the free energies
-                """
-                return -self._log_likelihood(f) - self._log_prior_laplace(f)
-        elif self.prior == 'cauchy':
-            def loss(f):
-                """
-                The negative log of the posterior with Cauchy priors on the free energies
-                """
-                return -self._log_likelihood(f) - self._log_prior_cauchy(f)
-        else:
-            raise Exception('The prior "{0}" is not supported'.format(self.prior))
-
-        # Creating a gradient function with autograd
-        training_grad = grad(loss)
-
-        # Fit free energies by gradient decent
-        i = 1
-        step_max = precision * 100
-        while (i <= max_iter) and step_max >= precision:
-            g = training_grad(f_guess) # The negative of the gradient as maximizing the posterior
-            t = self._line_search(loss, f_guess, g)
-            step = t*g[1:]
-            f_guess[1:] -= step
-            step_max = step.max()
-            i += 1
-            f_guess -= f_guess[0]
-
-        return f_guess
-
     def map_estimator(self, f_guess=None, method='BFGS'):
         """
-        Provides a maximum a posteriori estimate of the free energies, relative to state 1.
+        Provides a maximum a posteriori estimate of the free energies relative to state 0.
 
         Parameters
         ----------
@@ -326,10 +257,10 @@ class MultinomialBayes(object):
 
         return fit.x
 
-    def sample_posterior(self, nwalkers = 50, nmoves = 500, f_guess=None, ):
+    def sample_posterior(self, nwalkers=50, nmoves=500, f_guess=None):
         """
-        Sample from the posterior using the Emcee package. The initial starting point for the sampler is the
-        least squares fit.
+        Sample from the posterior using the Emcee package. The initial starting point for the sampler is the either the
+        current estimate of the free energies or MAP estimate.
 
         nwalkers: int
             the number of walkers for the 'affine invariant sampler'
@@ -341,7 +272,8 @@ class MultinomialBayes(object):
         Returns
         -------
         chain : numpy.ndarray
-          the output from the Emcee sampler
+          the output from the Emcee sampler. The dimensionality of the sampled free energies is one less than the number
+          of states because the free energy of the first state is set to zero.
         """
 
         # Defining an internal log_posterior function to minimize for fitting.
@@ -376,8 +308,6 @@ class MultinomialBayes(object):
         initial_positions = [f_guess[1:] + scale * np.random.randn(len(f_guess) - 1) for i in range(nwalkers)]
         # Note that the number of free parameters is len(f_guess - 1) as free energies are relative to first.
 
-
-
         sampler = emcee.EnsembleSampler(nwalkers, len(f_guess) - 1, log_posterior)
         sampler.run_mcmc(initial_positions, nmoves)
 
@@ -386,24 +316,85 @@ class MultinomialBayes(object):
         return sampler.chain
 
 
-class BayesAdaptor(MultinomialBayes):
+class BayesAdaptor(MultinomialBayesEstimator):
     """
     Class to generate biases and free energies estimates from multinomial samples. To be used when
     iterating between estimating free energies via expanded ensemble sampling and running new simulations
     with new biases.
+
+    Example
+    -------
+    Let's imagine we've run an unbiased simulation over states and configurations. We thin the trejector to produce
+    approximately uncorrelated samples in state space, and observe the counts in the histogram over the states
+    >>> counts  = np.array((10, 103, 200))
+
+    Clearly there are 3 states in the system. We seek to simultaneously estimate the free energy for each state and
+    produce biases that can be applied to an upcoming simulation in order to maximally reduce the uncertainty on the
+    current estimates of the free energies. This class handles that task.
+
+    First, we must initialize the class with the above histogram counts, our prior information of the relative free
+    energies and the type of Bayesian update scheme we want.
+    >>> adaptor = BayesAdaptor(counts=counts, method='map', prior='gaussian', spread=100.0, location=0.0)
+
+    In the above, we've specified that we want our adaptor to choose biases based on MAP estimate of the free energy.
+    We've also placed a Gaussian prior of mean 0 and standard deviation of 100 for our relative free
+    energies: this is equivalent to saying that we're 95% sure that the true free energies are between -200 and +200
+    and tightly peaked around zero. If our previous work indicated that the prior should be 'flatter', we can choose
+    prior='laplace' or even prior='cauchy'.
+
+    Let's sample from the posterior, get the MAP estimate, and produce biases for the next set of simulations:
+    >>> new_bias = adaptor.update(sample_posterior=True)
+
+    We've used to the flag sample_posterior=True to indicate that we wish to sample from the posterior distribution.
+    The MAP estimate is obtained via gradient decent, but by specifying that we want sample from the posterior ensures
+    that the starting point for gradient decent is the posterior mean.
+
+    As we've set method='map', new_bias is simulatanoesly an estimate for the free energy *and* that bias that should
+    be applied in the next simulation.
+
+    If we wanted to do thompson sampling to pick our next bias, i.e.
+    >>> adaptor.method = 'thompson'
+    >>> new_biases = adaptor.update()
+
+    Then new_biases are not good estimates of the free energies, either the MAP or mean will be better:
+    >>> mean_estimates = np.hstack((0.0, np.mean(adaptor.flat_samples, axis=0)))
+
+    The estimated free energies are all calculated to the first state, which is zero and not sampled over. This is why
+    in the above we've added a 0.0 to the vector of means. The MAP estimate based on the mean estimates is then:
+    >>> map_estimates = adaptor.map_estimator(f_guess=mean_estimates)
+
+    The point of using method='thompson' is that it may result in estimates of lower variance in fewer iterations of
+    sampling and bias generation than method='mean' or method='map'.
+
+    Now let's say we applied our new_bias to our simulation. We thin the data and observe new counts
+    >>> new_counts = np.array((49, 25, 33))
+
+    We should update our adaptor with this new information, along with the bias we applied:
+    >>> adaptor.zetas = np.vstack((adaptor.zetas, new_biases))
+    >>> adaptor.counts = np.vstack((adaptor.counts, new_counts))
+
+    The next bias for the next simulation can then be estimated:
+    >>> new_bias = adaptor.update()
+
+    Apply these biases to the next simulation, count the number of times each state was visited and repeat the adaptive
+    procedure.
     """
-    def __init__(self, zetas, counts, prior='gaussian', location=None, spread=None):
+    def __init__(self, counts, zetas=None, method='thompson', logistic=False, prior='gaussian', location=None,
+                 spread=None):
         """
         Parameters
         ----------
-        zetas: numpy.ndarray
-            the previous biasing potentials applied to each state, where the columns correspond to the states
-            and rows to the repeats.
         counts: numpy.ndarray
             the number of times the state was visited for a number of repeats, where the columns correspond to the states
             and rows repeats.
-        free_energies: numpy.ndarray
-            the initial guess of the free energies for each state, relative to the first
+        zetas: numpy.ndarray
+            the previous biasing potentials applied to each state, where the columns correspond to the states
+            and rows to the repeats.
+        method: string
+            the method used to generate new biases for adaptive free energy estimation.
+            Either 'thompson', 'map', 'mean', or 'median'.
+        logistic: bool
+            whether to convolute biasing potential generation with a logistic distribution
         prior: string
             the name of the prior distribution. Choice is between 'gaussian', 'laplace', and 'cauchy'
         location: float, numpy.ndarray
@@ -414,14 +405,24 @@ class BayesAdaptor(MultinomialBayes):
             If float, the same value is applied to all free energies.
         """
 
-        super(BayesAdaptor, self).__init__(zetas=zetas, counts=counts, prior=prior, location=location, spread=spread)
+        super(BayesAdaptor, self).__init__(counts=counts, zetas=zetas, prior=prior, location=location, spread=spread)
 
         # The processed posterior samples
         self.flat_samples = np.array(0)
 
+        # The method used to draw the next estimate/bias for the free energies
+        method_set = ('thompson', 'map', 'mean', 'median')
+        if method.lower() not in method_set:
+            raise Exception('Must select a method must be from {0}'.format(method_set))
+        else:
+            self.method = method
+
+        # Whether convolute estimates/bias generation method with a logistic distribution
+        self.logistic = logistic
+
     def _flatten_samples(self, burnin=100):
         """
-        Take samples from the Emcee generated posterior samples and collapse the walkers into single vectors of samples
+        Take samples from the Emcee generated posterior samples and collapse the walkers into a single vector of samples
 
         Parameters
         ----------
@@ -440,14 +441,7 @@ class BayesAdaptor(MultinomialBayes):
         self.flat_samples = self.samples[:, burnin:, :].reshape((-1, len(self.free_energies) - 1))
         return self.flat_samples
 
-    def _park_update(self):
-        """
-        The update scheme by Park et. al, which is a fast but approximate update scheme.
-
-        """
-        pass
-
-    def gen_biases(self, method='thompson', burnin=100, logistic=False):
+    def _gen_biases(self, samples=None):
         """
         Generate biasing potentials given a set of free energy samples for adaptive sampling.
 
@@ -467,30 +461,49 @@ class BayesAdaptor(MultinomialBayes):
             whether to pass the  logistic sampling  biases as the location
         Returns
         -------
-
+        biases: numpy array
+            The biasing potentials to apply to each state to achieve the target probabilities
         """
-        methods = ('thompson', 'map', 'park', 'mean', 'median')
-        if method.lower() not in methods:
-            raise Exception('Must select a method must be from {0}'.format(methods))
 
-        samples = self._flatten_samples(burnin=burnin)
-
-        if method == 'thompson':
+        if self.method == 'thompson':
+            if samples is None:
+                raise Exception('the method "{0}" must require samples from posterior.'.format(self.method))
             index = np.random.choice(samples.shape[0])
             biases = samples[index, :]
-        elif method == 'map':
-            f_guess = np.hstack((0.0, np.percentile(samples, 50, axis=0)))
-            biases = self.map_estimator(f_guess=f_guess)
-        elif method == 'median':
+        elif self.method == 'median':
+            if samples is None:
+                raise Exception('the method "{0}" must require samples from posterior.'.format(self.method))
             biases = np.percentile(samples, 50, axis=0)
-        elif method == 'mean':
+        elif self.method == 'mean':
+            if samples is None:
+                raise Exception('the method "{0}" must require samples from posterior.'.format(self.method))
             biases = np.mean(samples, axis=0)
-        elif method == 'park':
-            biases = self._park_update()
+        elif self.method == 'map':
+            if samples is not None:
+                f_guess = np.hstack((0.0, np.percentile(samples, 50, axis=0)))
+                biases = self.map_estimator(f_guess=f_guess)
+            else:
+                biases = self.map_estimator()
         else:
-            raise Exception('Must select a method must be from {0}'.format(methods))
+            raise Exception('Update method {0} not recognized'.format(self.method))
 
-        if logistic:
+        if self.logistic:
             biases = np.array([np.random.logistic(loc=f, scale=1, size=1)[0] for f in biases])
+
+        return np.hstack((0.0, biases))
+
+    def update(self, sample_posterior=True, nwalkers=20, nmoves=200, burnin=None):
+
+        if burnin is None:
+            burnin = int(nmoves/2.0)
+
+        # Generate samples from posterior:
+        if sample_posterior:
+            self.sample_posterior(nwalkers=nwalkers, nmoves=nmoves)
+            samples = self._flatten_samples(burnin=burnin)
+        else:
+            samples = None
+
+        biases = self._gen_biases(samples)
 
         return biases

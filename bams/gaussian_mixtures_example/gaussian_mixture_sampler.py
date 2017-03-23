@@ -2,7 +2,7 @@ import numpy as np
 
 class GaussianMixtureSampler(object):
     """
-    Class to sample positions and states of a one-dimensional mixture of Gaussian distributions with a
+    Class to step positions and states of a one-dimensional mixture of Gaussian distributions with a
     different standard deviations. The mixture is of the form
 
         p_i(x) = q_i(x) * exp(zeta_i) / sum_i[Z_i * exp(zeta_i)],
@@ -28,7 +28,7 @@ class GaussianMixtureSampler(object):
     and record the state every 10 steps.
     >>> sampler.sampler_mixture(initerations=500, save_freq=10):
 
-    One iteration corresponds to an independence sample from the current state and a Gibbs sample of the state.
+    One iteration corresponds to an independence step from the current state and a Gibbs step of the state.
     current. View the number of times a visit to a state was recorded
     >>> print sampler.state_counter
 

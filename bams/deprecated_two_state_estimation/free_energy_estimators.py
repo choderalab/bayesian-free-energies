@@ -166,12 +166,12 @@ class MaximumLikelihood(object):
 
 class BayesianSampler(MaximumLikelihood):
     """
-    Class to estimate the free energy difference between two states using the 'emcee' package to sample from
+    Class to estimate the free energy difference between two states using the 'emcee' package to step from
     the posterior. Currently, only prior distributions with 2 parameters are supported.
 
     Example
     -------
-    Perform mixture sampling then sample from the posterior of the free energy difference.
+    Perform mixture sampling then step from the posterior of the free energy difference.
     Samples states:
     >>> zetas = range(-5,5)
     >>> n_success = []
