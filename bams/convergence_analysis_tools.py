@@ -227,7 +227,7 @@ def bayes_mse_multinomial(niterations, prior, spread, location, f_true, method, 
 
     Parameters
     ----------
-    ncycles = int
+    niterations = int
         The number of iterations for state sampling and adaptive estimation
     prior = str
         The type of prior used, either 'gaussian', 'laplace', or 'cauchy'
@@ -272,7 +272,7 @@ def bayes_mse_multinomial(niterations, prior, spread, location, f_true, method, 
         counts.append(np.random.multinomial(nsamps, q))
         # Sample from the posterior
         adaptor = BayesAdaptor(zetas=np.array(zetas), counts=np.array(counts), prior=prior, spread=spread,
-                               location=location, logistic=logistic)
+                               location=location, logistic=logistic, method=method)
         new_zeta = adaptor.update(nwalkers=enwalkers, nmoves=enmoves)
         # Sample a new biasing potential
         zetas.append(new_zeta)

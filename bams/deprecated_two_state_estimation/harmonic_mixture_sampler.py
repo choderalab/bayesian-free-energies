@@ -144,7 +144,7 @@ class HarmonicSwapper(object):
         Parameter
         ---------
         openmm: bool
-          whether OpenMM is being used to sample configurations
+          whether OpenMM is being used to step configurations
 
         Returns
         -------
@@ -155,7 +155,7 @@ class HarmonicSwapper(object):
         initial_energy = self.get_energy(self.position, strip_in_unit_system(self.K_current))
 
         # Pick a random force constant
-        # TODO: sample states from the global update scheme.
+        # TODO: step states from the global update scheme.
         new_state = np.random.choice((0, 1))
         new_K = self.K[new_state]
         new_zeta = self.zeta[new_state]
@@ -185,7 +185,7 @@ class HarmonicSwapper(object):
         nsteps: int
           the number of moleculear dynamics moves per iteration
         openmm : bool
-          whether OpenMM is being used to sample configurations
+          whether OpenMM is being used to step configurations
         """
         #TODO: save the time course data of the states, instead of adding them
         for iteration in range(niterations):
