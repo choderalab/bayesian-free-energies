@@ -1,5 +1,6 @@
 import numpy as np
-from bams.example_systems import GaussianMixtureSampler, IndependentMultinomialSamper
+import pytest
+from bams.example_systems import GaussianMixtureSampler, IndependentMultinomialSamper, ArgonTemperingSampler
 
 """
 Tests for mixture sampling examples. These example samplers are used to test and demonstrate Bayesian adaptive mixture
@@ -112,4 +113,24 @@ class TestMultinomialSampler(object):
         sampler.step(nsteps=nsteps)
 
         assert sampler.histogram.sum() == nsteps
+
+# See whether openmm is installed for the next test. If not, it's skipped.
+try:
+    import simtk
+    import openmmtools
+    openmm_missing = False
+except:
+    openmm_missing = True
+
+@pytest.mark.skipif(openmm_missing, reason='OpenMM and openmmtools are not installed')
+class TestArgonTemperingExample(object):
+    """
+    Make sure the class to perform simulated tempering operates as expect.
+    """
+    def test_sampler(self):
+        """
+        Test the sampling features
+        """
+        sampler = ArgonTemperingSampler(nparticles=1000, temperature_ladder=np.linspace(300, 500, 20), biases=None)
+        sampler.sample(nsteps=10, niterations=10)
 
