@@ -222,3 +222,169 @@ class GaussianMixtureSampler(object):
         self.histogram = np.zeros(len(self.sigmas))
         self.nmoves = 0
 
+class ArgonTemperingSampler(object):
+    """
+    Class to perform simulated tempering on an Argon gas in the NVT ensemble.
+
+    This class samples from the joint distribution
+
+        p(x,i) = exp(-(f_i + u(x)) / kT_i + zeta_i) / sum_i[exp(-(f_i + u(x)) / kT_i + zeta_i)],
+
+    where u(x) is the energy at configuration x, zeta_i is the bias for the ith state and f_i is the free energy at
+    state i:
+
+        exp(-f_i / kT_i) =  \int_X exp(-u(x) / kT_i) dx
+
+    The configuration of system is updated using openmm's default Langevin integrator with a timestep of 2fs.
+    The temperature of the system is updated with Gibbs sampling.
+
+    Example
+    -------
+
+    This is how to perform an unbiased simulated tempering simulation with 20 states, with temperatures between 300K and
+    400K. First, the sampler must be initialized:
+
+    >>> nparticles = 1000  # The number of Argon particles
+    >>> temperature_ladder = np.linspace(300.0, 500.0, 20)
+    >>> biases = np.zeros(len(temperature_ladder))         # Unbiased simulation means all the biases are zero
+    >>> sampler = ArgonTemperingSampler(nparticles, temperature_ladder, biases)
+
+    Running 100 iterations of simulated tempering. Each iteration consists of 2ps of dynamics (nsteps=1000) and the
+    state information is stored after every 5 iterations (save_freq=5):
+
+    >>> sampler.sample(nsteps=1000, niterations=100, save_freq=5 )
+
+    View the states that were visited:
+    >>> print(sampler.histogram)
+    """
+
+    def __init__(self, nparticles, temperature_ladder=np.linspace(300.0, 500.0, 20), biases=None):
+        """
+
+        Parameters
+        ----------
+        nparticles: int
+            the number of Argon atoms in the system.
+        temperature_ladder: list or array of floats
+            the temperatures (in Kelvin) over which tempering will be performed.
+        biases: numpy array
+            the biasing potentials for each state. If None, then each bias=0.
+        """
+        # Import the modules that are specific to this class:
+        from simtk import openmm, unit
+        from openmmtools.testsystems import LennardJonesFluid
+
+        # Initialize the sampler statistics
+        self.state = 0
+        self.histogram = np.zeros(len(temperature_ladder))
+        self.nmoves = 0
+        # Pre-assign the conditional probability of the state given the current position.
+        self.weights = np.zeros(len(temperature_ladder))
+
+        # Get the biases
+        if biases is None:
+            self.biases = np.zeros(len(temperature_ladder))
+        else:
+            self.biases = biases
+
+        # Initialize the temperature and temperature ladder
+        self.temperature_ladder = []
+        for t in temperature_ladder:
+            self.temperature_ladder.append(t * unit.kelvin)
+        self.temperature = temperature_ladder[self.state]
+
+        # Boltzmann's constant
+        kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
+        self.kB = kB.in_units_of(unit.kilojoule_per_mole / unit.kelvin)
+
+        # Create the system:
+        argon_gas = LennardJonesFluid(nparticles=nparticles, mass=39.9 * unit.amu, sigma=3.4 * unit.angstrom,
+                                      epsilon=0.238 * unit.kilocalories_per_mole)
+        system, positions = argon_gas.system, argon_gas.positions
+
+        # Initialize the integrator at the first temperature in the list
+        self.integrator = openmm.LangevinIntegrator(self.temperature, 1 / unit.picosecond,
+                                                    0.002 * unit.picosecond)
+        # Create the OpenMM context
+        self.context = openmm.Context(system, self.integrator)
+        self.context.setPositions(positions)
+        self.context.setVelocitiesToTemperature(self.temperature)
+
+    def reduced_potential(self):
+        """
+        Calculate the reduced potential of the system at every temperature in the ladder. The reduced potential, u_i, is
+        given by
+
+            u_i = U / kT_i
+
+        where U is the potential energy, k is Boltzmann's constant, T_i is the ith temperature in the ladder.
+
+        Returns
+        -------
+        u: list of floats
+            the reduced potential at every state.
+        """
+        state = self.context.getState(getEnergy=True)
+        pot_energy = state.getPotentialEnergy()
+
+        u = np.array([pot_energy / (self.kB * t) for t in self.temperature_ladder])
+
+        return u
+
+    def _sample_state(self):
+        """
+        Sample the state given the current configuration of the system
+
+        Returns
+        -------
+
+        """
+        # Sample from the states using Gibbs sampling
+        q = np.exp(- self.reduced_potential() + self.biases)
+        self.weights = q / np.sum(q)
+        states = range(len(self.temperature_ladder))
+
+        # Update the state and integrator with the new temperature
+        self.state = np.random.choice(states, p=self.weights)
+        self.temperature = self.temperature_ladder[self.state]
+        self.integrator.setTemperature(self.temperature)
+
+    def sample(self, nsteps=1000, niterations=500, save_freq=1):
+        """
+        Sample over configurations and states (temperatures) using Gibbs sampling.
+
+        Parameters
+        ----------
+        nsteps: int
+            the number of molecular dynamics steps per iteration to sample the configuration.
+        niterations: int
+            the number of iterations of Gibbs sampling, in which MD is performed and temperature sampling
+        save_freq: int
+            the frequency with which to save record the state and update the state histogram
+
+        Returns
+        -------
+        current_state: numpy.ndarray
+            binary vector where the 1 indicates the current state of the system.
+
+        """
+        for iteration in range(niterations):
+            # Sample position
+            self.integrator.step(nsteps)
+            # Sample state (temperature)
+            self._sample_state()
+            # Save state
+            if iteration % save_freq == 0:
+                self.nmoves += 1
+                self.histogram[self.state] += 1
+
+        current_state = np.zeros(len(self.temperature_ladder))
+        current_state[self.state] = 1
+        return current_state
+
+    def reset_statistics(self):
+        """
+        Reset the state histogram and move counter
+        """
+        self.histogram = np.zeros(len(self.temperature_ladder))
+        self.nmoves = 0
