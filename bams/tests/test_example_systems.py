@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 from bams.example_systems import GaussianMixtureSampler, IndependentMultinomialSamper, ArgonTemperingSampler
 
 """
@@ -113,6 +114,16 @@ class TestMultinomialSampler(object):
 
         assert sampler.histogram.sum() == nsteps
 
+
+# See whether openmm is installed for TestArgonTemperingSampler. If not, those tests are skipped.
+try:
+    import simtk
+    import openmmtools
+    openmm_missing = False
+except:
+    openmm_missing = True
+
+@pytest.mark.skipif(openmm_missing, reason='OpenMM and openmmtools are not installed')
 class TestArgonTemperingSampler(object):
     """
     A set of tests for the simulated tempering example of an argon gas.
