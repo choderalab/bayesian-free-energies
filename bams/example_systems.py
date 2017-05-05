@@ -312,12 +312,12 @@ class ArgonTemperingSampler(object):
 
     def reduced_potential(self):
         """
-        Calculate the reduced potential of the system at every temperature in the ladder. The reduced potential, u, is
+        Calculate the reduced potential of the system at every temperature in the ladder. The reduced potential, u_i, is
         given by
 
-            u = U / kT
+            u_i = U / kT_i
 
-        where U is the potential energy, k is Boltzmann's constant, T is the temperature.
+        where U is the potential energy, k is Boltzmann's constant, T_i is the ith temperature in the ladder.
 
         Returns
         -------

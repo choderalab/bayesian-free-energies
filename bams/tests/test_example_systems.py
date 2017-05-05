@@ -197,4 +197,3 @@ class TestArgonTemperingSampler(object):
         sampler = ArgonTemperingSampler(100, np.linspace(300.0, 400.0, 20))
         u = sampler.reduced_potential()
         assert np.all(np.diff(u) < 0)
-
