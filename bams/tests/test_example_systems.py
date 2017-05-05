@@ -121,7 +121,6 @@ class TestArgonTemperingSampler(object):
         """
         Ensure initialization works.
         """
-
         nparticles = 1000
         temperature_ladder = np.linspace(300.0, 500.0, 20)
         biases = np.arange(len(temperature_ladder))
@@ -142,7 +141,6 @@ class TestArgonTemperingSampler(object):
         current_state = sampler.sample(nsteps=1, niterations=1, save_freq=1)
         assert np.where(current_state == 1)[0] == sampler.state
 
-
     def test_histogram_counts(self):
         """
         Make sure the histogram correctly tracks the total number of states visited.
@@ -157,8 +155,8 @@ class TestArgonTemperingSampler(object):
         Make sure that when the temperature ladder is all the same temperature and there no biases are applied
         a number of states are visited. Tests that states can be sampled over.
 
-        This is a stochastic test. However, the probability for remaining in same state for 100 iterations with uniform
-        weights is something like 1E-10.
+        This is a stochastic test. However, the probability for remaining in same state for 100 iterations when there
+        are 5 total number of states with uniform wieghts is roughly 1E-70.
         """
         nstates = 5
         sampler = ArgonTemperingSampler(100, np.repeat(300.0, nstates))
@@ -169,7 +167,6 @@ class TestArgonTemperingSampler(object):
         """
         Make sure the sampling statistics are correctly reset
         """
-
         sampler = ArgonTemperingSampler(100, np.linspace(300.0, 400.0, 20))
         sampler.sample(nsteps=1, niterations=5, save_freq=1)
         sampler.reset_statistics()

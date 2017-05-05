@@ -235,13 +235,30 @@ class ArgonTemperingSampler(object):
 
         exp(-f_i / kT_i) =  \int_X exp(-u(x) / kT_i) dx
 
-    Examples
-    --------
+    The configuration of system is updated using openmm's default Langevin integrator with a timestep of 2fs.
+    The temperature of the system is updated with Gibbs sampling.
 
-    To appear
+    Example
+    -------
+
+    This is how to perform an unbiased simulated tempering simulation with 20 states, with temperatures between 300K and
+    400K. First, the sampler must be initialized:
+
+    >>> nparticles = 1000  # The number of Argon particles
+    >>> temperature_ladder = np.linspace(300.0, 500.0, 20)
+    >>> biases = np.zeros(len(temperature_ladder))         # Unbiased simulation means all the biases are zero
+    >>> sampler = ArgonTemperingSampler(nparticles, temperature_ladder, biases)
+
+    Running 100 iterations of simulated tempering. Each iteration consists of 2ps of dynamics (nsteps=1000) and the
+    state information is stored after every 5 iterations (save_freq=5):
+
+    >>> sampler.sample(nsteps=1000, niterations=100, save_freq=5 )
+
+    View the states that were visited:
+    >>> print(sampler.histogram)
     """
 
-    def __init__(self, nparticles, temperature_ladder=np.linspace(300, 500, 20), biases=None):
+    def __init__(self, nparticles, temperature_ladder=np.linspace(300.0, 500.0, 20), biases=None):
         """
 
         Parameters
